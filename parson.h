@@ -1,7 +1,7 @@
 /*
  SPDX-License-Identifier: MIT
 
- Parson 1.5.3 (https://github.com/kgabis/parson)
+ Parson 1.5.2 (https://github.com/kgabis/parson)
  Copyright (c) 2012 - 2023 Krzysztof Gabis
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -36,9 +36,9 @@ extern "C"
 
 #define PARSON_VERSION_MAJOR 1
 #define PARSON_VERSION_MINOR 5
-#define PARSON_VERSION_PATCH 3
+#define PARSON_VERSION_PATCH 2
 
-#define PARSON_VERSION_STRING "1.5.3"
+#define PARSON_VERSION_STRING "1.5.2"
 
 #include <stddef.h>   /* size_t */
 
@@ -48,24 +48,24 @@ typedef struct json_array_t  JSON_Array;
 typedef struct json_value_t  JSON_Value;
 
 enum json_value_type {
-    JSONError   = -1,
-    JSONNull    = 1,
-    JSONString  = 2,
-    JSONNumber  = 3,
-    JSONObject  = 4,
-    JSONArray   = 5,
-    JSONBoolean = 6
+	JSONError   = -1,
+	JSONNull    = 1,
+	JSONString  = 2,
+	JSONNumber  = 3,
+	JSONObject  = 4,
+	JSONArray   = 5,
+	JSONBoolean = 6
 };
 typedef int JSON_Value_Type;
 
 enum json_result_t {
-    JSONSuccess = 0,
-    JSONFailure = -1
+	JSONSuccess = 0,
+	JSONFailure = -1
 };
 typedef int JSON_Status;
 
-typedef void * (*JSON_Malloc_Function)(size_t);
-typedef void   (*JSON_Free_Function)(void *);
+typedef void * (*JSON_Malloc_Function)(size_t size, void * userdata);
+typedef void (*JSON_Free_Function)(void * ptr, void * userdata);
 
 /* A function used for serializing numbers (see json_set_number_serialization_function).
    If 'buf' is null then it should return number of bytes that would've been written 
@@ -73,50 +73,63 @@ typedef void   (*JSON_Free_Function)(void *);
 */
 typedef int (*JSON_Number_Serialization_Function)(double num, char *buf);
 
-/* Call only once, before calling any other function from parson API. If not called, malloc and free
-   from stdlib will be used for all allocations */
-void json_set_allocation_functions(JSON_Malloc_Function malloc_fun, JSON_Free_Function free_fun);
+/* Struct used to pass JSON parser config to parsing functions */
+struct JSON_Parser
+{
+	/* Allocation function to use. If null, malloc from stdlib will be used. */
+	JSON_Malloc_Function malloc_func;
 
-/* Sets if slashes should be escaped or not when serializing JSON. By default slashes are escaped.
- This function sets a global setting and is not thread safe. */
-void json_set_escape_slashes(int escape_slashes);
+	/* Free function to use. If null, free from stdlib will be used. */
+	JSON_Free_Function free_func;
 
-/* Sets float format used for serialization of numbers.
-   Make sure it can't serialize to a string longer than PARSON_NUM_BUF_SIZE.
-   If format is null then the default format is used. */
-void json_set_float_serialization_format(const char *format);
+	/* User data to provide to the malloc and free functions */
+	void * malloc_userdata;
 
-/* Sets a function that will be used for serialization of numbers.
-   If function is null then the default serialization function is used. */
-void json_set_number_serialization_function(JSON_Number_Serialization_Function fun);
+	/* Sets float format used for serialization of numbers.
+	   Make sure it can't serialize to a string longer than PARSON_NUM_BUF_SIZE.
+	   If format is null then the default format is used. */
+	char const * float_fmt_str;
+
+	/* Function that will be used for serialization of numbers.
+	   If null, default serialization function is used. */
+	JSON_Number_Serialization_Function number_serialization_func;
+
+	/* Should slashes be escaped when serializing JSON? By default slashes are escaped. */
+	int escape_slashes;
+};
+
+typedef struct JSON_Parser JSON_Parser;
+
+/* Default parser that uses malloc/free, JSON_DEFAULT_FLOAT_FORMAT and escape slashes */
+JSON_Parser json_get_default_parser();
 
 /* Parses first JSON value in a file, returns NULL in case of error */
-JSON_Value * json_parse_file(const char *filename);
+JSON_Value * json_parse_file(JSON_Parser const * parser, const char *filename);
 
 /* Parses first JSON value in a file and ignores comments (/ * * / and //),
    returns NULL in case of error */
-JSON_Value * json_parse_file_with_comments(const char *filename);
+JSON_Value * json_parse_file_with_comments(JSON_Parser const * parser, const char *filename);
 
 /*  Parses first JSON value in a string, returns NULL in case of error */
-JSON_Value * json_parse_string(const char *string);
+JSON_Value * json_parse_string(JSON_Parser const * parser, const char *string);
 
 /*  Parses first JSON value in a string and ignores comments (/ * * / and //),
-    returns NULL in case of error */
-JSON_Value * json_parse_string_with_comments(const char *string);
+	returns NULL in case of error */
+JSON_Value * json_parse_string_with_comments(JSON_Parser const * parser, const char *string);
 
 /* Serialization */
-size_t      json_serialization_size(const JSON_Value *value); /* returns 0 on fail */
-JSON_Status json_serialize_to_buffer(const JSON_Value *value, char *buf, size_t buf_size_in_bytes);
-JSON_Status json_serialize_to_file(const JSON_Value *value, const char *filename);
-char *      json_serialize_to_string(const JSON_Value *value);
+size_t      json_serialization_size(JSON_Parser const * parser, const JSON_Value *value); /* returns 0 on fail */
+JSON_Status json_serialize_to_buffer(JSON_Parser const * parser, const JSON_Value *value, char *buf, size_t buf_size_in_bytes);
+JSON_Status json_serialize_to_file(JSON_Parser const * parser, const JSON_Value *value, const char *filename);
+char *      json_serialize_to_string(JSON_Parser const * parser, const JSON_Value *value);
 
 /* Pretty serialization */
-size_t      json_serialization_size_pretty(const JSON_Value *value); /* returns 0 on fail */
-JSON_Status json_serialize_to_buffer_pretty(const JSON_Value *value, char *buf, size_t buf_size_in_bytes);
-JSON_Status json_serialize_to_file_pretty(const JSON_Value *value, const char *filename);
-char *      json_serialize_to_string_pretty(const JSON_Value *value);
+size_t      json_serialization_size_pretty(JSON_Parser const * parser, const JSON_Value *value); /* returns 0 on fail */
+JSON_Status json_serialize_to_buffer_pretty(JSON_Parser const * parser, const JSON_Value *value, char *buf, size_t buf_size_in_bytes);
+JSON_Status json_serialize_to_file_pretty(JSON_Parser const * parser, const JSON_Value *value, const char *filename);
+char *      json_serialize_to_string_pretty(JSON_Parser const * parser, const JSON_Value *value);
 
-void        json_free_serialized_string(char *string); /* frees string from json_serialize_to_string and json_serialize_to_string_pretty */
+void        json_free_serialized_string(JSON_Parser const * parser, char *string); /* frees string from json_serialize_to_string and json_serialize_to_string_pretty */
 
 /* Comparing */
 int  json_value_equals(const JSON_Value *a, const JSON_Value *b);
@@ -172,30 +185,30 @@ int json_object_dothas_value_of_type(const JSON_Object *object, const char *name
 
 /* Creates new name-value pair or frees and replaces old value with a new one.
  * json_object_set_value does not copy passed value so it shouldn't be freed afterwards. */
-JSON_Status json_object_set_value(JSON_Object *object, const char *name, JSON_Value *value);
-JSON_Status json_object_set_string(JSON_Object *object, const char *name, const char *string);
-JSON_Status json_object_set_string_with_len(JSON_Object *object, const char *name, const char *string, size_t len);  /* length shouldn't include last null character */
-JSON_Status json_object_set_number(JSON_Object *object, const char *name, double number);
-JSON_Status json_object_set_boolean(JSON_Object *object, const char *name, int boolean);
-JSON_Status json_object_set_null(JSON_Object *object, const char *name);
+JSON_Status json_object_set_value(JSON_Parser const * parser, JSON_Object *object, const char *name, JSON_Value *value);
+JSON_Status json_object_set_string(JSON_Parser const * parser, JSON_Object *object, const char *name, const char *string);
+JSON_Status json_object_set_string_with_len(JSON_Parser const * parser, JSON_Object *object, const char *name, const char *string, size_t len);  /* length shouldn't include last null character */
+JSON_Status json_object_set_number(JSON_Parser const * parser, JSON_Object *object, const char *name, double number);
+JSON_Status json_object_set_boolean(JSON_Parser const * parser, JSON_Object *object, const char *name, int boolean);
+JSON_Status json_object_set_null(JSON_Parser const * parser, JSON_Object *object, const char *name);
 
 /* Works like dotget functions, but creates whole hierarchy if necessary.
  * json_object_dotset_value does not copy passed value so it shouldn't be freed afterwards. */
-JSON_Status json_object_dotset_value(JSON_Object *object, const char *name, JSON_Value *value);
-JSON_Status json_object_dotset_string(JSON_Object *object, const char *name, const char *string);
-JSON_Status json_object_dotset_string_with_len(JSON_Object *object, const char *name, const char *string, size_t len); /* length shouldn't include last null character */
-JSON_Status json_object_dotset_number(JSON_Object *object, const char *name, double number);
-JSON_Status json_object_dotset_boolean(JSON_Object *object, const char *name, int boolean);
-JSON_Status json_object_dotset_null(JSON_Object *object, const char *name);
+JSON_Status json_object_dotset_value(JSON_Parser const * parser, JSON_Object *object, const char *name, JSON_Value *value);
+JSON_Status json_object_dotset_string(JSON_Parser const * parser, JSON_Object *object, const char *name, const char *string);
+JSON_Status json_object_dotset_string_with_len(JSON_Parser const * parser, JSON_Object *object, const char *name, const char *string, size_t len); /* length shouldn't include last null character */
+JSON_Status json_object_dotset_number(JSON_Parser const * parser, JSON_Object *object, const char *name, double number);
+JSON_Status json_object_dotset_boolean(JSON_Parser const * parser, JSON_Object *object, const char *name, int boolean);
+JSON_Status json_object_dotset_null(JSON_Parser const * parser, JSON_Object *object, const char *name);
 
 /* Frees and removes name-value pair */
-JSON_Status json_object_remove(JSON_Object *object, const char *name);
+JSON_Status json_object_remove(JSON_Parser const * parser, JSON_Object *object, const char *name);
 
 /* Works like dotget function, but removes name-value pair only on exact match. */
-JSON_Status json_object_dotremove(JSON_Object *object, const char *key);
+JSON_Status json_object_dotremove(JSON_Parser const * parser, JSON_Object *object, const char *key);
 
 /* Removes all name-value pairs in object */
-JSON_Status json_object_clear(JSON_Object *object);
+JSON_Status json_object_clear(JSON_Parser const * parser, JSON_Object *object);
 
 /*
  *JSON Array
@@ -210,44 +223,47 @@ int           json_array_get_boolean(const JSON_Array *array, size_t index); /* 
 size_t        json_array_get_count  (const JSON_Array *array);
 JSON_Value  * json_array_get_wrapping_value(const JSON_Array *array);
 
+/* Set the reserve of a JSON Array upfront */
+JSON_Status json_array_set_reserve(JSON_Parser const * parser, JSON_Array *array, size_t size);
+
 /* Frees and removes value at given index, does nothing and returns JSONFailure if index doesn't exist.
  * Order of values in array may change during execution.  */
-JSON_Status json_array_remove(JSON_Array *array, size_t i);
+JSON_Status json_array_remove(JSON_Parser const * parser, JSON_Array *array, size_t i);
 
 /* Frees and removes from array value at given index and replaces it with given one.
  * Does nothing and returns JSONFailure if index doesn't exist.
  * json_array_replace_value does not copy passed value so it shouldn't be freed afterwards. */
-JSON_Status json_array_replace_value(JSON_Array *array, size_t i, JSON_Value *value);
-JSON_Status json_array_replace_string(JSON_Array *array, size_t i, const char* string);
-JSON_Status json_array_replace_string_with_len(JSON_Array *array, size_t i, const char *string, size_t len); /* length shouldn't include last null character */
-JSON_Status json_array_replace_number(JSON_Array *array, size_t i, double number);
-JSON_Status json_array_replace_boolean(JSON_Array *array, size_t i, int boolean);
-JSON_Status json_array_replace_null(JSON_Array *array, size_t i);
+JSON_Status json_array_replace_value(JSON_Parser const * parser, JSON_Array *array, size_t i, JSON_Value *value);
+JSON_Status json_array_replace_string(JSON_Parser const * parser, JSON_Array *array, size_t i, const char* string);
+JSON_Status json_array_replace_string_with_len(JSON_Parser const * parser, JSON_Array *array, size_t i, const char *string, size_t len); /* length shouldn't include last null character */
+JSON_Status json_array_replace_number(JSON_Parser const * parser, JSON_Array *array, size_t i, double number);
+JSON_Status json_array_replace_boolean(JSON_Parser const * parser, JSON_Array *array, size_t i, int boolean);
+JSON_Status json_array_replace_null(JSON_Parser const * parser, JSON_Array *array, size_t i);
 
 /* Frees and removes all values from array */
-JSON_Status json_array_clear(JSON_Array *array);
+JSON_Status json_array_clear(JSON_Parser const * parser, JSON_Array *array);
 
 /* Appends new value at the end of array.
  * json_array_append_value does not copy passed value so it shouldn't be freed afterwards. */
-JSON_Status json_array_append_value(JSON_Array *array, JSON_Value *value);
-JSON_Status json_array_append_string(JSON_Array *array, const char *string);
-JSON_Status json_array_append_string_with_len(JSON_Array *array, const char *string, size_t len); /* length shouldn't include last null character */
-JSON_Status json_array_append_number(JSON_Array *array, double number);
-JSON_Status json_array_append_boolean(JSON_Array *array, int boolean);
-JSON_Status json_array_append_null(JSON_Array *array);
+JSON_Status json_array_append_value(JSON_Parser const * parser, JSON_Array *array, JSON_Value *value);
+JSON_Status json_array_append_string(JSON_Parser const * parser, JSON_Array *array, const char *string);
+JSON_Status json_array_append_string_with_len(JSON_Parser const * parser, JSON_Array *array, const char *string, size_t len); /* length shouldn't include last null character */
+JSON_Status json_array_append_number(JSON_Parser const * parser, JSON_Array *array, double number);
+JSON_Status json_array_append_boolean(JSON_Parser const * parser, JSON_Array *array, int boolean);
+JSON_Status json_array_append_null(JSON_Parser const * parser, JSON_Array *array);
 
 /*
  *JSON Value
  */
-JSON_Value * json_value_init_object (void);
-JSON_Value * json_value_init_array  (void);
-JSON_Value * json_value_init_string (const char *string); /* copies passed string */
-JSON_Value * json_value_init_string_with_len(const char *string, size_t length); /* copies passed string, length shouldn't include last null character */
-JSON_Value * json_value_init_number (double number);
-JSON_Value * json_value_init_boolean(int boolean);
-JSON_Value * json_value_init_null   (void);
-JSON_Value * json_value_deep_copy   (const JSON_Value *value);
-void         json_value_free        (JSON_Value *value);
+JSON_Value * json_value_init_object (JSON_Parser const * parser);
+JSON_Value * json_value_init_array  (JSON_Parser const * parser);
+JSON_Value * json_value_init_string (JSON_Parser const * parser, const char *string); /* copies passed string */
+JSON_Value * json_value_init_string_with_len(JSON_Parser const * parser, const char *string, size_t length); /* copies passed string, length shouldn't include last null character */
+JSON_Value * json_value_init_number (JSON_Parser const * parser, double number);
+JSON_Value * json_value_init_boolean(JSON_Parser const * parser, int boolean);
+JSON_Value * json_value_init_null   (JSON_Parser const * parser);
+JSON_Value * json_value_deep_copy   (JSON_Parser const * parser, const JSON_Value *value);
+void         json_value_free        (JSON_Parser const * parser, JSON_Value *value);
 
 JSON_Value_Type json_value_get_type   (const JSON_Value *value);
 JSON_Object *   json_value_get_object (const JSON_Value *value);
